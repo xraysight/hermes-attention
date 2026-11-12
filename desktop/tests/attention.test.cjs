@@ -106,7 +106,7 @@ test('Polish and English bundles have identical keys and unknown locales fall ba
  assert.deepEqual(Object.keys(translations.pl).sort(),Object.keys(translations.en).sort());
  assert.equal(translate('pl-PL','test'),'Testuj');assert.equal(translate('en-US','test'),'Test');assert.equal(translate('de-DE','test'),'Test');
  assert.equal(translate('pl','pending',3),'Oczekujące decyzje: 3');assert.equal(translate('en','pending',3),'Pending decisions: 3');
- assert.ok(translate('en','defaultPhrase').startsWith('Hermes '));assert.ok(translate('pl','defaultPhrase').startsWith('Hermes '));
+ assert.equal(translate('en','defaultPhrase'),'Your Hermes needs you now!');assert.equal(translate('pl','defaultPhrase'),'Your Hermes needs you now!');
 });
 test('plugin follows app locale at render time without changing the saved TTS text',()=>{
  let locale='pl',registered;const pages=[],saved={text:'A custom message that must remain unchanged.',ttsLanguage:'pl-PL',volume:42};
@@ -256,5 +256,30 @@ test('legacy pause state cannot suppress active requests or erase shared mutes',
  assert.equal(stops,0,'an obsolete broadcast must not stop playback');assert.deepEqual(Array.from(r.queue.due(now),p=>p.id),['active']);
  assert.equal(r.queue.snoozedUntil,undefined);assert.equal(typeof r.snooze,'undefined');assert.equal(typeof Queue.prototype.snooze,'undefined');
  r.mute(key);assert.ok(!('until' in JSON.parse(storage.get('hermes-attention.quiet'))),'new mute writes must not persist the retired pause timer');
+});
+test('fresh settings keep Sound signal and the same initial TTS message in every UI locale',()=>{
+ for(const locale of ['en','pl','de-DE']){
+  const api=load({sdk:{host:{state:{}}}}),writes=[];
+  const ctx={storage:{get:(k,f)=>f,set:(k,v)=>writes.push([k,v])},i18n:{t:(key,...args)=>api.translate(locale,key,...args)},onEvent(){},setInterval(){},onDispose(){}};
+  const r=new api.Runtime(ctx);
+  assert.equal(r.settings.mode,'tone');assert.equal(r.settings.text,'Your Hermes needs you now!');assert.equal(writes.length,0);
+ }
+});
+test('bundled MP3 is available offline without importing or persisting a file',async()=>{
+ const writes=[],api=load({sdk:{host:{state:{}}},testAudioRecord:async(key,value)=>{assert.equal(value,undefined,'defaults must not overwrite stored audio');return undefined}});
+ const ctx={storage:{get:(k,f)=>f,set:(k,v)=>writes.push([k,v])},onEvent(){},setInterval(){},onDispose(){},rest:()=>{throw Error('default audio must not use a provider')}};
+ const r=new api.Runtime(ctx);await r.refreshMedia();
+ assert.equal(r.media.file?.name,'synth-digital-alarm.mp3');assert.equal(r.media.file?.bundled,true);
+ const data=await r.getAudio('file');assert.ok(data.url.startsWith('data:audio/mpeg;base64,'));
+ const actual=Buffer.from(data.url.split(',')[1],'base64'),asset=fs.readFileSync(path.join(__dirname,'..','audio','synth-digital-alarm.mp3'));
+ assert.deepEqual(actual,asset,'embedded playback must match the attributed source asset');assert.ok(actual.length>0);
+ assert.equal(r.settings.mode,'tone');assert.equal(writes.length,0);assert.equal(r.note,'');assert.equal(r.error,'');
+});
+test('saved recordings and custom settings take precedence over bundled defaults',async()=>{
+ const saved={url:'data:audio/mpeg;base64,c3ludGhldGlj',name:'synthetic-user-audio.mp3'},settings={mode:'file',text:'Keep my own message.',ttsLanguage:'pl-PL'};
+ const api=load({sdk:{host:{state:{}}},testAudioRecord:async(key,value)=>{assert.equal(value,undefined);return key==='file'?saved:undefined}});
+ const ctx={storage:{get:(key,fallback)=>key==='settings'?settings:fallback,set(){throw Error('defaults must not write settings')}},onEvent(){},setInterval(){},onDispose(){}};
+ const r=new api.Runtime(ctx);await r.refreshMedia();assert.equal(r.media.file.name,saved.name);assert.equal(await r.getAudio('file'),saved);
+ assert.equal(r.settings.mode,'file');assert.equal(r.settings.text,settings.text);assert.equal(r.settings.ttsLanguage,'pl-PL');
 });
 module.exports={load,event};

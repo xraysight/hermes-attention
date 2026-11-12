@@ -16,6 +16,8 @@ FILES = {
     'backend/dashboard/plugin_api.py': 'plugins/hermes-attention/dashboard/plugin_api.py',
     'README.md': 'README.md',
     'LICENSE': 'LICENSE',
+    'THIRD_PARTY_NOTICES.md': 'THIRD_PARTY_NOTICES.md',
+    'desktop/audio/synth-digital-alarm.mp3': 'desktop-plugins/hermes-attention/audio/synth-digital-alarm.mp3',
 }
 
 

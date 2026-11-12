@@ -1,8 +1,15 @@
 # Changelog
 
-This file describes the prepared source snapshot, not a published release. Desktop and backend versions are independent. No earlier public release history is asserted.
+Desktop and backend versions are independent. Unreleased entries describe local source changes, not a published release.
 
-## Desktop 1.4.3 / backend API 1.1.0 — publication preparation
+## Desktop 1.5.0 / backend API 1.1.0 — 2026-11-12
+
+- Bundle SFX Jar's CC0 1.0 Digital alarm clock MP3 as the default custom-audio example, embedded for offline, single-file installation. Include the original asset and third-party notice in distribution archives.
+- Keep Sound signal as the initial alert mode. Existing imported audio and saved settings take precedence over the bundled defaults.
+- Set the initial TTS message to "Your Hermes needs you now!" independently of the interface language, without overwriting saved text or generating speech on startup.
+- Document the Desktop Capabilities → Plugins marketplace as the preferred installation route when listed, followed by conditional catalog CLI commands and a manual GitHub fallback.
+
+## Desktop 1.4.3 / backend API 1.1.0 — initial public source
 
 - Repeating alerts for approvals and clarification requests, including Desktop batch questions; never automatically approves or answers.
 - Distinct Ding, Call and Urgent synthesized tones; custom audio, cached speech and tone-plus-speech modes. Legacy `bell` maps to Ding.
@@ -17,4 +24,4 @@ This file describes the prepared source snapshot, not a published release. Deskt
 
 ### Verification boundaries
 
-Local verification is Windows-based. Unit tests use synthetic fixtures and mocked TTS, not live provider calls. No macOS/Linux end-to-end result, hosted CI pass, published repository or public release is asserted. See the README for operational and privacy limitations.
+Local end-to-end verification is Windows-based. Unit tests use synthetic fixtures and mocked TTS, not live provider calls. Hosted CI results apply to the exact tested commit and do not establish macOS/Linux end-to-end playback support. See the README for operational and privacy limitations.

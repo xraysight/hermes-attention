@@ -31,7 +31,7 @@ Use `requirements-dev.lock` for the verified development/CI environment, not to 
 - Preserve connection/profile/session/prompt isolation, authoritative settlement/reconciliation, disconnected-scope suspension, multi-window sound ownership and unload cleanup.
 - Keep TTS commit-triggered rather than keystroke- or mount-triggered. Preserve cache matching, serialization, stale-result rejection and provider-cost disclosure. Do not silently change the configured provider or send conversation content for synthesis.
 - Preserve backend input validation, output containment/size bounds, sanitized errors and worker-owned cleanup, including after a request times out.
-- Keep package inputs explicitly allowlisted. Public archives must not contain provider-generated speech, personal audio, configuration, caches or virtual environments.
+- Keep package inputs explicitly allowlisted. Public archives must not contain provider-generated speech, personal audio, configuration, caches or virtual environments. The explicitly allowlisted CC0 sample is an exception for verified third-party audio: preserve `THIRD_PARTY_NOTICES.md`, the original asset and byte equality with its embedded data URL. Keep its provenance separate from the code's MIT license.
 - Update the changelog and documentation when user-visible behavior changes. Keep frontend/package/archive version and backend manifest/API versions consistent with their respective contracts.
 
 ## Manual checks worth recording
