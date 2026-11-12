@@ -1,0 +1,7 @@
+manifest_version: 2
+name: hermes-attention
+version: 1.1.0
+description: Optional configured-provider speech generation for local attention alarms.
+kind: standalone
+provides_tools: []
+provides_hooks: []

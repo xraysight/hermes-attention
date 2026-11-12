@@ -1,0 +1,18 @@
+{
+  "name": "hermes-attention",
+  "version": "1.4.3",
+  "description": "Repeating approval and question alerts for Hermes Desktop.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": {
+    "name": "xraysight",
+    "email": "20925002+xraysight@users.noreply.github.com"
+  },
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test desktop/tests/attention.test.cjs",
+    "check": "node --check desktop/plugin.js",
+    "build": "python scripts/build.py"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "hermes-attention",
+  "label": "Attention speech backend",
+  "version": "1.1.0",
+  "description": "Optional TTS generation API; audio playback remains client-local.",
+  "api": "plugin_api.py",
+  "tab": {"hidden": true}
+}
