@@ -2,6 +2,13 @@
 
 Desktop and backend versions are independent. Unreleased entries describe local source changes, not a published release.
 
+## Desktop 1.5.1 / backend API 1.1.0 — catalog packaging
+
+- Put the native plugin manifest, Python entrypoint and dashboard API at the repository root alongside `desktop/plugin.js`, so Hermes can install both components as one package.
+- Declare the tested Hermes compatibility floor (`>=0.23.1`) and align the package/frontend version while keeping the backend wire API at 1.1.0.
+- Remove diagnostic-only raw Desktop bridge calls and retain SDK-only frontend integration. Document the optional Automatic TTS adapter's internal-helper compatibility boundary.
+- Update archive inputs, packaging regression coverage and manual helper instructions for the unified source layout. The published v1.5.0 tag and assets are unchanged.
+
 ## Desktop 1.5.0 / backend API 1.1.0 — 2026-11-12
 
 - Bundle SFX Jar's CC0 1.0 Digital alarm clock MP3 as the default custom-audio example, embedded for offline, single-file installation. Include the original asset and third-party notice in distribution archives.

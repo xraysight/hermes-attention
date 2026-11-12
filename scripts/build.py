@@ -10,10 +10,10 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 FILES = {
     'desktop/plugin.js': 'desktop-plugins/hermes-attention/plugin.js',
-    'backend/plugin.yaml': 'plugins/hermes-attention/plugin.yaml',
-    'backend/__init__.py': 'plugins/hermes-attention/__init__.py',
-    'backend/dashboard/manifest.json': 'plugins/hermes-attention/dashboard/manifest.json',
-    'backend/dashboard/plugin_api.py': 'plugins/hermes-attention/dashboard/plugin_api.py',
+    'plugin.yaml': 'plugins/hermes-attention/plugin.yaml',
+    '__init__.py': 'plugins/hermes-attention/__init__.py',
+    'dashboard/manifest.json': 'plugins/hermes-attention/dashboard/manifest.json',
+    'dashboard/plugin_api.py': 'plugins/hermes-attention/dashboard/plugin_api.py',
     'README.md': 'README.md',
     'LICENSE': 'LICENSE',
     'THIRD_PARTY_NOTICES.md': 'THIRD_PARTY_NOTICES.md',

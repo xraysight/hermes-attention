@@ -282,4 +282,8 @@ test('saved recordings and custom settings take precedence over bundled defaults
  const r=new api.Runtime(ctx);await r.refreshMedia();assert.equal(r.media.file.name,saved.name);assert.equal(await r.getAudio('file'),saved);
  assert.equal(r.settings.mode,'file');assert.equal(r.settings.text,settings.text);assert.equal(r.settings.ttsLanguage,'pl-PL');
 });
+test('desktop entry uses SDK surfaces without raw host bridge access',()=>{
+ const source=fs.readFileSync(path.join(__dirname,'..','plugin.js'),'utf8');
+ assert.ok(!source.includes('hermesDesktop'),'catalog builds must not use the raw host bridge');
+});
 module.exports={load,event};

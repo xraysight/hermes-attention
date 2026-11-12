@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture
@@ -205,12 +205,14 @@ def test_adapter_calls_existing_tool_once_without_overrides(api, monkeypatch):
     assert calls == [('hello', 'safe-output.mp3')]
 
 
-def test_packaging_declares_backend_only_and_registers_no_tools():
+def test_unified_package_declares_desktop_and_backend_without_agent_tools():
     import yaml
     assert (ROOT / 'plugin.yaml').is_file(), 'Missing plugin manifest'
     manifest = yaml.safe_load((ROOT / 'plugin.yaml').read_text())
     assert manifest['name'] == 'hermes-attention'
-    assert manifest['version'] == '1.1.0'
+    assert manifest['version'] == '1.5.1'
+    assert manifest['requires_hermes'] == '>=0.23.1'
+    assert (ROOT / 'desktop/plugin.js').is_file()
     assert manifest['provides_tools'] == []
     assert manifest['provides_hooks'] == []
     dashboard = json.loads((ROOT / 'dashboard/manifest.json').read_text())

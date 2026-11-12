@@ -23,7 +23,7 @@ New installations start in **Sound signal** mode. A ready-to-use **Digital alarm
 
 ## Install
 
-You need Hermes Desktop with plugin support. **You do not need to build or compile anything.**
+You need Hermes Desktop with plugin support. The unified package requires **Hermes 0.23.1 or newer**. **You do not need to build or compile anything.**
 
 ### Install in Hermes Desktop (recommended)
 
@@ -112,7 +112,7 @@ Speech generation needs a small helper installed alongside the Hermes gateway, t
 If your marketplace or CLI installation already includes the helper, check that its **Agent** component is enabled for the gateway/profile you use; do not install a second copy. The manual helper steps below are for installations that do not include it. Use the extracted GitHub download from the [fallback instructions](#manual-github-installation-fallback) as their source.
 
 1. Find the Hermes home folder for the gateway/profile you use. This may be different from the Desktop plugins folder. For a remote gateway, install the helper on the remote machine.
-2. From the download, copy the `backend` folder into that Hermes home's `plugins` folder and rename the copied folder to `hermes-attention`. Keep all files and subfolders inside it:
+2. Create `hermes-attention` inside that Hermes home's `plugins` folder. From the root of the extracted GitHub download, copy `plugin.yaml`, `__init__.py` and the complete `dashboard` folder into it:
 
    ```text
    plugins/
@@ -134,6 +134,8 @@ If your marketplace or CLI installation already includes the helper, check that 
 5. Make sure speech generation is configured in Hermes. **Automatic** uses your existing Hermes speech provider and voice. Choosing a specific language uses Edge TTS and requires `edge_tts` in the gateway's Python environment. If it is missing, consult the [Hermes plugin documentation](https://hermes-agent.nousresearch.com/docs/developer-guide/plugins) or the person who manages your gateway.
 
 Enabling the helper is separate from turning on the plugin in Desktop. It uses Hermes' existing connection and security settings; do not run it as a separate public service.
+
+**Compatibility note:** Automatic speech uses Hermes' internal `tools.tts_tool.text_to_speech_tool` helper. This adapter may need adjustment after a Hermes update. The plugin does not read provider credentials itself. Explicit language selection uses Edge TTS instead.
 
 </details>
 
@@ -168,7 +170,9 @@ Local verification has been on Windows. macOS and Linux installation and playbac
 
 - Settings and recordings are stored locally in Desktop. The plugin has no telemetry endpoint.
 - For speech generation, the message you enter is sent through your Hermes gateway to the selected speech provider. Do not enter secrets or sensitive information.
-- The plugin watches approval and question events. It does not request conversation transcripts or read credentials.
+- The plugin watches gateway events and reconciles approval/question and session metadata in the relevant gateway/profile scopes. Resume requests use `omit_messages: true`, so it does not deliberately request conversation transcripts; event payloads can still reach plugin memory. It does not read credentials directly.
+- Local storage also contains prompt identifiers, mute/recent-ring state and speech text/language metadata. Background timers poll for waiting requests; the optional backend uses a synthesis worker and temporary files under the active Hermes cache.
+- A configured Hermes TTS provider may launch a custom command you configured. A synthesis timeout does not necessarily stop that provider or undo a charge; its worker can remain busy until it finishes. The backend can stay enabled independently of the Desktop component.
 - Saved recordings are not encrypted by the plugin. Disabling or uninstalling it does not securely erase local data or provider records.
 
 See [SECURITY.md](SECURITY.md) for more about privacy and reporting sensitive issues.

@@ -15,7 +15,7 @@ Hermes Attention is an attention aid, not a security boundary, approval transpor
 
 The helper rejects unknown fields, blank/oversized text and unsupported locales; caps audio at 16 MiB; confines returned file paths to its request directory; uses generic synthesis errors; and returns audio with `Cache-Control: no-store`. A single-worker guard rejects concurrent synthesis instead of queuing paid requests. These checks do not make an untrusted provider or custom provider command safe.
 
-Temporary audio is created below the active Hermes home's cache and cleaned when its worker exits. A timeout does not necessarily cancel an upstream request or undo a charge; the worker retains its guard and files until it finishes. Crashes/forced termination may leave files. Host/provider diagnostics and provider-side retention are not controlled by the plugin. Desktop health diagnostics include aggregate counts and plugin version.
+Temporary audio is created below the active Hermes home's cache and cleaned when its worker exits. A timeout does not necessarily cancel an upstream request or undo a charge; the worker retains its guard and files until it finishes. Crashes/forced termination may leave files. Host/provider diagnostics and provider-side retention are not controlled by the plugin. The Desktop frontend does not write its own health diagnostics through the raw host bridge.
 
 Alarm playback depends on the host, browser permissions, device volume and connectivity for prompt verification. Web Locks prevent duplicate sound ownership only in the same storage context. Cached/imported audio is local data, not a securely isolated vault. Public builds intentionally exclude provider-generated and personal recordings.
 
@@ -25,4 +25,4 @@ There is currently no dedicated private security-reporting address or guaranteed
 
 A useful report contains the affected source/version, a minimal synthetic reproduction, expected/observed behavior and impact. Redact credentials, personal paths, session identifiers and provider data. Test only systems you own or are authorized to assess; do not incur someone else's TTS charges.
 
-No supported-version/security-fix window or platform-wide security assurance is promised. Before publication, establish a real private reporting route and verify license/provenance.
+No supported-version/security-fix window or platform-wide security assurance is promised. Preserve and verify license/provenance when adding third-party assets.

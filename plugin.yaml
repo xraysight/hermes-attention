@@ -1,0 +1,8 @@
+manifest_version: 2
+name: hermes-attention
+version: 1.5.1
+requires_hermes: ">=0.23.1"
+description: Repeating sound alerts for pending approvals and questions in Hermes Desktop, with optional cached speech.
+kind: standalone
+provides_tools: []
+provides_hooks: []

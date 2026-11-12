@@ -1,6 +1,8 @@
 """Offline release packaging tests using synthetic source files."""
 import importlib.util
 import hashlib
+import json
+import re
 from pathlib import Path
 import zipfile
 import pytest
@@ -8,10 +10,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 FILES = {
     'desktop/plugin.js': 'desktop-plugins/hermes-attention/plugin.js',
-    'backend/plugin.yaml': 'plugins/hermes-attention/plugin.yaml',
-    'backend/__init__.py': 'plugins/hermes-attention/__init__.py',
-    'backend/dashboard/manifest.json': 'plugins/hermes-attention/dashboard/manifest.json',
-    'backend/dashboard/plugin_api.py': 'plugins/hermes-attention/dashboard/plugin_api.py',
+    'plugin.yaml': 'plugins/hermes-attention/plugin.yaml',
+    '__init__.py': 'plugins/hermes-attention/__init__.py',
+    'dashboard/manifest.json': 'plugins/hermes-attention/dashboard/manifest.json',
+    'dashboard/plugin_api.py': 'plugins/hermes-attention/dashboard/plugin_api.py',
     'README.md': 'README.md',
     'LICENSE': 'LICENSE',
     'THIRD_PARTY_NOTICES.md': 'THIRD_PARTY_NOTICES.md',
@@ -73,6 +75,26 @@ def test_missing_input_does_not_create_a_partial_archive(tmp_path):
     with pytest.raises(FileNotFoundError):
         module.build(source, output)
     assert not list(output.glob('*.zip'))
+
+
+def test_repository_package_versions_and_real_archive_agree(tmp_path):
+    import yaml
+    manifest = yaml.safe_load((ROOT / 'plugin.yaml').read_text(encoding='utf-8'))
+    package = json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))
+    source = (ROOT / 'desktop/plugin.js').read_text(encoding='utf-8')
+    version = re.search(r"\bVERSION='([^']+)'", source).group(1)
+    assert manifest['version'] == package['version'] == version
+    assert manifest['requires_hermes'] == '>=0.23.1'
+    archive = load_builder().build(ROOT, tmp_path / 'real-package')
+    with zipfile.ZipFile(archive) as built:
+        assert set(built.namelist()) == set(FILES.values())
+        for name, member in FILES.items():
+            assert built.read(member) == (ROOT / name).read_bytes()
+    encoded = re.search(r"const BUNDLED_FILE = .*?url:'data:audio/mpeg;base64,([^']+)'", source).group(1)
+    import base64
+    audio = (ROOT / 'desktop/audio/synth-digital-alarm.mp3').read_bytes()
+    assert base64.b64decode(encoded, validate=True) == audio
+    assert hashlib.sha256(audio).hexdigest() in (ROOT / 'THIRD_PARTY_NOTICES.md').read_text(encoding='utf-8')
 
 
 def test_invalid_version_cannot_become_an_archive_path(tmp_path):
