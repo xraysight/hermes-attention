@@ -286,4 +286,159 @@ test('desktop entry uses SDK surfaces without raw host bridge access',()=>{
  const source=fs.readFileSync(path.join(__dirname,'..','plugin.js'),'utf8');
  assert.ok(!source.includes('hermesDesktop'),'catalog builds must not use the raw host bridge');
 });
+function previewHarness({settings=null,record,rest,request}={}){
+ const pages=[],played=[],requests=[],disposers=[],timers=new Map(),audio=new Map(record?[['speech',record]]:[]);let nextTimer=0;
+ class Audio {
+  constructor(url){this.src=url}
+  play(){played.push(this.src);setImmediate(()=>this.onended?.());return Promise.resolve()}
+  pause(){} removeAttribute(){this.src=''} load(){}
+ }
+ const api=load({Audio,sdk:{host:{state:{},request}},useState:()=>[0,()=>{}],useRef:()=>({}),jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props}),
+  setTimeout:fn=>{timers.set(++nextTimer,fn);return nextTimer},clearTimeout:id=>timers.delete(id),
+  testAudioRecord:async(key,value)=>{if(value!==undefined)audio.set(key,value);return audio.get(key)}});
+ const ctx={storage:{get:(key,f)=>key==='settings'?(settings||f):f,set(){}},register(){},registerSettingsPage:p=>pages.push(p),onEvent(){},setInterval(){},onDispose:fn=>disposers.push(fn),
+  rest:async(route,options)=>{requests.push([route,options]);return rest?rest(route,options):{url:'data:audio/mpeg;base64,dGVzdA=='}}};
+ api.plugin.register(ctx);const wrapper=pages[0].render(),model=wrapper.props.model,nodes=[];
+ const visit=n=>{if(Array.isArray(n))n.forEach(visit);else if(n&&typeof n==='object'){nodes.push(n);visit(n.props?.children)}};visit(wrapper.type(wrapper.props));
+ const mode=nodes.find(n=>n.type==='select'&&['tone','file','tts','both'].includes(n.props.value));
+ return {model,played,requests,audio,timers,dispose:()=>disposers.forEach(fn=>fn()),selectMode:value=>mode.props.onChange({target:{value}})};
+}
+test('first TTS preview prepares the unchanged default message and caches it for later tests',async()=>{
+ const h=previewHarness();assert.equal(h.requests.length,0,'opening settings must not synthesize');h.selectMode('tts');
+ assert.equal(h.requests.length,0,'selecting a mode alone must not synthesize');await h.model.test();
+ assert.equal(h.requests.length,1,'Test must prepare a missing recording');assert.equal(h.requests[0][0],'/synthesize');
+ assert.equal(h.requests[0][1].body.text,'Your Hermes needs you now!');assert.equal(h.played.length,1);assert.equal(h.model.error,'');
+ assert.equal(h.audio.get('speech').text,'Your Hermes needs you now!');await h.model.test();
+ assert.equal(h.requests.length,1,'later previews must reuse cached speech');assert.equal(h.played.length,2);assert.equal(h.timers.size,0);h.dispose();
+});
+test('TTS preview waits for synthesis already in progress without a duplicate request',async()=>{
+ let release;const h=previewHarness({rest:()=>new Promise(resolve=>release=resolve)});h.selectMode('tts');
+ const preparation=h.model.generate({automatic:true});await new Promise(resolve=>setImmediate(resolve));
+ let finished=false;const preview=h.model.test().then(()=>{finished=true});await new Promise(resolve=>setImmediate(resolve));
+ const finishedBeforeRecording=finished;release({url:'data:audio/mpeg;base64,dGVzdA=='});await Promise.all([preparation,preview]);
+ assert.equal(finishedBeforeRecording,false,'Test must wait for the in-flight recording');assert.equal(h.requests.length,1);assert.equal(h.played.length,1);assert.equal(h.model.error,'');h.dispose();
+});
+for(const expired of [false,true])test(`Test waits for current speech after stale synthesis ${expired?'after':'before'} debounce expiry`,async()=>{
+ const pending=[];const h=previewHarness({rest:()=>new Promise(resolve=>pending.push(resolve))});h.selectMode('tts');
+ const preparation=h.model.generate({automatic:true});await new Promise(resolve=>setImmediate(resolve));
+ h.model.update({text:'Current synthetic message B'});h.model.requestAutoGenerate();
+ if(expired){for(const [id,fn] of h.timers){h.timers.delete(id);fn()}}
+ let finished=false;const preview=h.model.test().then(()=>{finished=true});await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(h.requests.length,1,'Test must wait for stale synthesis A before requesting B');
+ pending[0]({url:'data:audio/mpeg;base64,c3RhbGU='});await preparation;await new Promise(resolve=>setImmediate(resolve));
+ const waitedForB=!finished,staleCached=h.audio.has('speech'),playedBeforeB=h.played.length;
+ pending[1]?.({url:'data:audio/mpeg;base64,Y3VycmVudA=='});await preview;
+ assert.equal(waitedForB,true,'Test must remain pending until current speech B is prepared');
+ assert.equal(h.requests.length,2,'Test must initiate or join exactly one synthesis for B');
+ assert.equal(h.requests[1][1].body.text,'Current synthetic message B');assert.equal(staleCached,false);assert.equal(playedBeforeB,0);
+ assert.deepEqual(h.played,['data:audio/mpeg;base64,Y3VycmVudA==']);assert.equal(h.audio.get('speech').text,'Current synthetic message B');
+ assert.equal(h.model.error,'');assert.equal(h.timers.size,0);h.dispose();
+});
+for(const boundary of ['stale synthesis','current synthesis'])for(const cancellation of ['Stop','edit','disposal'])test(`${cancellation} while Test waits for ${boundary} prevents delayed playback`,async()=>{
+ const pending=[];const h=previewHarness({rest:()=>new Promise(resolve=>pending.push(resolve))});h.selectMode('tts');
+ const preparation=h.model.generate({automatic:true});await new Promise(resolve=>setImmediate(resolve));
+ h.model.update({text:'Current synthetic message B'});h.model.requestAutoGenerate();const preview=h.model.test();await new Promise(resolve=>setImmediate(resolve));
+ if(boundary==='current synthesis'){pending[0]({url:'data:audio/mpeg;base64,c3RhbGU='});await preparation;await new Promise(resolve=>setImmediate(resolve))}
+ if(cancellation==='Stop')h.model.player.stop();else if(cancellation==='edit')h.model.update({text:'New synthetic message C'});else h.dispose();
+ if(boundary==='stale synthesis')pending[0]({url:'data:audio/mpeg;base64,c3RhbGU='});else pending[1]({url:'data:audio/mpeg;base64,Y3VycmVudA=='});
+ await Promise.all([preparation,preview]);assert.equal(h.requests.length,boundary==='stale synthesis'?1:2);assert.equal(h.played.length,0);
+ assert.equal(h.audio.has('speech'),boundary==='current synthesis'&&cancellation==='Stop');assert.equal(h.model.error,'');h.dispose();
+});
+test('repeated Test clicks after stale synthesis coalesce current preparation and play once',async()=>{
+ const pending=[];const h=previewHarness({rest:()=>new Promise(resolve=>pending.push(resolve))});h.selectMode('tts');
+ const preparation=h.model.generate({automatic:true});await new Promise(resolve=>setImmediate(resolve));
+ h.model.update({text:'Current synthetic message B'});h.model.requestAutoGenerate();const first=h.model.test();await new Promise(resolve=>setImmediate(resolve));
+ const second=h.model.test();await new Promise(resolve=>setImmediate(resolve));pending[0]({url:'data:audio/mpeg;base64,c3RhbGU='});
+ await preparation;await new Promise(resolve=>setImmediate(resolve));const matching=h.model.generate({automatic:true});
+ assert.equal(h.requests.length,2);assert.equal(h.audio.has('speech'),false);pending[1]({url:'data:audio/mpeg;base64,Y3VycmVudA=='});
+ await Promise.all([first,second,matching]);assert.equal(h.requests.length,2);assert.deepEqual(h.played,['data:audio/mpeg;base64,Y3VycmVudA==']);assert.equal(h.model.error,'');h.dispose();
+});
+for(const failed of ['stale','current'])test(`Test handles a ${failed} backend failure after a speech-key change without retries`,async()=>{
+ const pending=[];const h=previewHarness({rest:()=>new Promise((resolve,reject)=>pending.push({resolve,reject}))});h.selectMode('tts');
+ const preparation=h.model.generate({automatic:true});await new Promise(resolve=>setImmediate(resolve));
+ h.model.update({text:'Current synthetic message B'});h.model.requestAutoGenerate();
+ for(const [id,fn] of h.timers){h.timers.delete(id);fn()}
+ const preview=h.model.test();await new Promise(resolve=>setImmediate(resolve));
+ if(failed==='stale')pending[0].reject(Error('Synthetic stale failure'));else pending[0].resolve({url:'data:audio/mpeg;base64,c3RhbGU='});
+ await preparation;await new Promise(resolve=>setImmediate(resolve));assert.equal(h.requests.length,2);assert.equal(h.audio.has('speech'),false);
+ if(failed==='current')pending[1].reject(Error('Synthetic current failure'));else pending[1].resolve({url:'data:audio/mpeg;base64,Y3VycmVudA=='});
+ await preview;await new Promise(resolve=>setImmediate(resolve));assert.equal(h.requests.length,2);assert.equal(h.timers.size,0);
+ if(failed==='current'){assert.equal(h.played.length,0);assert.equal(h.audio.has('speech'),false);assert.equal(h.model.error.key,'generateFailed');assert.ok(h.model.error.args[0].includes('Synthetic current failure'))}
+ else{assert.deepEqual(h.played,['data:audio/mpeg;base64,Y3VycmVudA==']);assert.equal(h.model.error,'')}
+ h.dispose();
+});
+test('Test waits for the captured current language after stale synthesis',async()=>{
+ const pending=[];const h=previewHarness({rest:route=>route==='/capabilities'?Promise.resolve({languages:['de-DE']}):new Promise(resolve=>pending.push(resolve))});h.selectMode('tts');
+ const preparation=h.model.generate({automatic:true});await new Promise(resolve=>setImmediate(resolve));
+ h.model.update({ttsLanguage:'de-DE'});h.model.requestAutoGenerate();const preview=h.model.test();await new Promise(resolve=>setImmediate(resolve));
+ pending[0]({url:'data:audio/mpeg;base64,c3RhbGU='});await preparation;await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(h.audio.has('speech'),false);assert.equal(h.played.length,0);assert.equal(h.requests.length,3);assert.equal(h.requests[2][1].body.language,'de-DE');
+ pending[1]({url:'data:audio/mpeg;base64,Y3VycmVudA==',language:'de-DE'});await preview;
+ assert.equal(h.audio.get('speech').language,'de-DE');assert.deepEqual(h.played,['data:audio/mpeg;base64,Y3VycmVudA==']);assert.equal(h.model.error,'');h.dispose();
+});
+test('stopping a TTS preview before its cache lookup finishes does not start synthesis',async()=>{
+ const h=previewHarness();h.selectMode('tts');const preview=h.model.test();h.model.player.stop();await preview;
+ assert.equal(h.requests.length,0,'a cancelled preview must not contact the TTS provider');assert.equal(h.played.length,0);h.dispose();
+});
+test('TTS preview preserves backend failures instead of reporting a changed message',async()=>{
+ const h=previewHarness({rest:async()=>{throw Error('Synthetic helper unavailable')}});h.selectMode('tts');await h.model.test();
+ assert.equal(h.requests.length,1);assert.equal(h.played.length,0);assert.equal(h.model.error.key,'generateFailed');
+ assert.ok(h.model.error.args[0].includes('Synthetic helper unavailable'));assert.equal(h.timers.size,0,'failures must not schedule retries');h.dispose();
+});
+test('TTS preview plays successful synthesis while preserving a concurrent polling failure',async()=>{
+ let release;const polled=[],h=previewHarness({rest:()=>new Promise(resolve=>release=resolve),request:async method=>{polled.push(method);throw Error('Synthetic poll unavailable')}});h.selectMode('tts');
+ const preview=h.model.test();await new Promise(resolve=>setImmediate(resolve));await h.model.poll();
+ assert.deepEqual(polled,['session.active_list']);assert.equal(h.model.error.key,'pollFailed');const diagnostic=h.model.error;
+ release({url:'data:audio/mpeg;base64,dGVzdA=='});await preview;
+ assert.equal(h.requests.length,1);assert.equal(h.audio.get('speech').text,h.model.settings.text);assert.equal(h.audio.get('speech').language,h.model.settings.ttsLanguage);
+ assert.deepEqual(h.played,['data:audio/mpeg;base64,dGVzdA=='],'a polling banner must not prevent successful speech playback');
+ assert.equal(h.model.error,diagnostic,'successful preview must retain the unrelated polling diagnostic');h.dispose();
+});
+test('TTS preview reports its own synthesis failure when polling overwrites the shared error before task resumption',async()=>{
+ let rejectSynthesis,pollTask,TaskPromise;const h=previewHarness({rest:()=>new Promise((resolve,reject)=>rejectSynthesis=reject),request:()=>{throw Error('Unexpected host request')}});h.selectMode('tts');
+ // A same-realm rejection lets poll() update the banner before the synthesis waiter resumes.
+ const polled=[];h.model.rpc=(scope,method)=>{polled.push(method);return TaskPromise.reject(Error('Synthetic concurrent poll failure'))};
+ h.model.listeners.add(()=>{if(!h.model.generating&&h.model.error?.key==='generateFailed'&&!pollTask)pollTask=h.model.poll()});
+ const preview=h.model.test();await new Promise(resolve=>setImmediate(resolve));TaskPromise=h.model.synthesisTask.constructor;rejectSynthesis(Error('Synthetic synthesis unavailable'));
+ await preview;await pollTask;
+ assert.deepEqual(polled,['session.active_list']);assert.equal(h.requests.length,1);assert.equal(h.audio.has('speech'),false);assert.equal(h.played.length,0);
+ assert.equal(h.model.error.key,'generateFailed','preview must use its task outcome, not the background error banner');
+ assert.ok(h.model.error.args[0].includes('Synthetic synthesis unavailable'));assert.equal(h.timers.size,0);h.dispose();
+});
+test('TTS preview rejects empty text without contacting a provider',async()=>{
+ const h=previewHarness({settings:{mode:'tts',text:'   '}});await h.model.test();assert.equal(h.requests.length,0);assert.equal(h.played.length,0);assert.equal(h.model.error.key,'textRequired');h.dispose();
+});
+test('TTS preview replaces a recording for the wrong language and preserves explicit locale requests',async()=>{
+ const h=previewHarness({settings:{mode:'tts',text:'Synthetic notice',ttsLanguage:'pl-PL'},record:{url:'data:audio/mpeg;base64,b2xk',text:'Synthetic notice',language:'en-US'},
+  rest:async(route,options)=>route==='/capabilities'?{languages:['pl-PL']}:{url:'data:audio/mpeg;base64,bmV3',language:options.body.language}});
+ await h.model.test();assert.equal(h.requests.length,2);assert.equal(h.requests[0][0],'/capabilities');assert.equal(h.requests[1][1].body.language,'pl-PL');
+ assert.equal(h.audio.get('speech').language,'pl-PL');assert.deepEqual(h.played,['data:audio/mpeg;base64,bmV3']);assert.equal(h.model.error,'');h.dispose();
+});
+test('TTS preview reuses an existing recording even when the helper is unavailable',async()=>{
+ const h=previewHarness({record:{url:'data:audio/mpeg;base64,dGVzdA==',text:'Your Hermes needs you now!',language:'auto'},rest:async()=>{throw Error('Helper must not be contacted')}});
+ h.selectMode('tts');await h.model.test();assert.equal(h.requests.length,0);assert.equal(h.played.length,1);assert.equal(h.model.error,'');h.dispose();
+});
+test('Stop during TTS preparation prevents delayed playback but retains the prepared recording',async()=>{
+ let release;const h=previewHarness({rest:()=>new Promise(resolve=>release=resolve)});h.selectMode('tts');const preview=h.model.test();await new Promise(resolve=>setImmediate(resolve));
+ h.model.player.stop();release({url:'data:audio/mpeg;base64,dGVzdA=='});await preview;assert.equal(h.requests.length,1);assert.equal(h.played.length,0);assert.ok(h.audio.get('speech'));h.dispose();
+});
+test('editing text during a TTS preview rejects stale output and cancels playback',async()=>{
+ let release;const h=previewHarness({rest:()=>new Promise(resolve=>release=resolve)});h.selectMode('tts');const preview=h.model.test();await new Promise(resolve=>setImmediate(resolve));
+ h.model.update({text:'New synthetic message'});release({url:'data:audio/mpeg;base64,dGVzdA=='});await preview;
+ assert.equal(h.requests.length,1);assert.equal(h.played.length,0);assert.equal(h.audio.has('speech'),false);assert.equal(h.model.error,'');h.dispose();
+});
+test('disposal during a TTS preview prevents saving or playing the late recording',async()=>{
+ let release;const h=previewHarness({rest:()=>new Promise(resolve=>release=resolve)});h.selectMode('tts');const preview=h.model.test();await new Promise(resolve=>setImmediate(resolve));
+ h.dispose();release({url:'data:audio/mpeg;base64,dGVzdA=='});await preview;assert.equal(h.played.length,0);assert.equal(h.audio.has('speech'),false);assert.equal(h.model.error,'');
+});
+test('repeated Test clicks share in-flight synthesis and play only the latest preview',async()=>{
+ let release;const h=previewHarness({rest:()=>new Promise(resolve=>release=resolve)});h.selectMode('tts');const first=h.model.test();await new Promise(resolve=>setImmediate(resolve));
+ const second=h.model.test();await new Promise(resolve=>setImmediate(resolve));release({url:'data:audio/mpeg;base64,dGVzdA=='});await Promise.all([first,second]);
+ assert.equal(h.requests.length,1);assert.equal(h.played.length,1);assert.equal(h.model.error,'');h.dispose();
+});
+test('combined previews prepare speech while file previews never request TTS',async()=>{
+ const h=previewHarness();let tones=0;h.model.player.tone=async()=>{tones++};h.selectMode('both');await h.model.test();
+ assert.equal(tones,1);assert.equal(h.requests.length,1);assert.equal(h.played.length,1);h.dispose();
+ const file=previewHarness();file.selectMode('file');await file.model.test();assert.equal(file.requests.length,0);assert.equal(file.played.length,1);assert.equal(file.model.error,'');file.dispose();
+});
 module.exports={load,event};

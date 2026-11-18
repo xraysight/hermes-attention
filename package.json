@@ -1,6 +1,6 @@
 {
   "name": "hermes-attention",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Repeating approval and question alerts for Hermes Desktop.",
   "private": true,
   "type": "module",

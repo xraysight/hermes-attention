@@ -86,7 +86,7 @@ The bell lives in the top-right corner of Hermes:
 
 When an alarm sounds, return to Hermes and answer the question or handle the approval. Simply opening the window does not clear a waiting request. **Stop sound** ends the current playback only; use mute or the bell if you also want to stop future repeats.
 
-**Test** plays a single preview of the selected sound or recording. The repeat interval and maximum duration apply to real pending questions and approvals.
+**Test** plays a single preview of the selected sound or recording. In a speech mode, it first prepares and saves a recording if none matches the current text and TTS language; this can use the internet and incur provider charges. Matching recordings are reused. The repeat interval and maximum duration apply to real pending questions and approvals.
 
 ### Choose a sound
 
@@ -142,15 +142,16 @@ Enabling the helper is separate from turning on the plugin in Desktop. It uses H
 Once the helper is ready:
 
 1. Open the plugin settings and choose an alert mode that includes speech.
-2. Enter your message, such as "Your Hermes needs you now!", and choose its language.
-3. Click outside the message field or select a language. The plugin prepares the recording automatically; there is no Generate button.
-4. Wait for preparation to finish, then click **Test**.
+2. Keep the initial message or enter your own, and choose its language.
+3. Click **Test**. If no matching recording is saved, the plugin prepares it and plays one preview. If preparation is already in progress, Test waits for it instead of starting another request.
+
+Clicking outside an edited message field or selecting a speech language also prepares the recording automatically; there is no Generate button.
 
 Choosing a language changes pronunciation, not the words. Write your message in the language you want to hear.
 
 The initial TTS message is **"Your Hermes needs you now!"** in every interface language. Existing saved messages are kept unchanged. No speech is generated just by installing the plugin or opening its settings.
 
-**Speech generation may use the internet and incur provider charges.** Editing the message or selecting a speech language can trigger generation even when a sound-only alert mode is selected. To avoid these requests, leave the speech controls untouched and use built-in sounds or an imported recording. Playing an already-saved recording does not generate it again.
+**Speech generation may use the internet and incur provider charges.** Clicking **Test** in a speech mode can generate a missing or outdated recording. Editing the message or selecting a speech language can trigger generation even when a sound-only alert mode is selected. To avoid these requests, leave the speech controls untouched and use built-in sounds or an imported recording. Playing an already-saved recording does not generate it again.
 
 ## Troubleshooting
 

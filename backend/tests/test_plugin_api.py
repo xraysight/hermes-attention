@@ -210,7 +210,7 @@ def test_unified_package_declares_desktop_and_backend_without_agent_tools():
     assert (ROOT / 'plugin.yaml').is_file(), 'Missing plugin manifest'
     manifest = yaml.safe_load((ROOT / 'plugin.yaml').read_text())
     assert manifest['name'] == 'hermes-attention'
-    assert manifest['version'] == '1.5.1'
+    assert manifest['version'] == json.loads((ROOT / 'package.json').read_text())['version']
     assert manifest['requires_hermes'] == '>=0.23.1'
     assert (ROOT / 'desktop/plugin.js').is_file()
     assert manifest['provides_tools'] == []
