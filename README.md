@@ -6,6 +6,8 @@ Hermes Attention plays repeating sound alerts when Hermes Desktop needs your app
 
 It only alerts you. **It never approves actions or answers questions on your behalf.**
 
+Hermes Attention supports local gateways and remote gateways connected to Hermes Desktop by direct URL. Alerts play on the computer running Desktop, not on the gateway. Built-in sounds and saved recordings do not require the speech helper.
+
 ![Hermes Attention settings with sound alerts, sound presets, volume, repeat interval and speech options](docs/assets/hermes-attention-settings.png)
 
 ## What you can do
@@ -166,6 +168,8 @@ The initial TTS message is **"Your Hermes needs you now!"** in every interface l
 Sound alerts depend on Desktop, your audio device and the gateway connection. They cannot work while your computer is asleep or Hermes is closed, and they are not a guaranteed safety alarm. Playback pauses when the plugin cannot verify whether a request is still waiting.
 
 Local verification has been on Windows. macOS and Linux installation and playback have not been verified end to end.
+
+On Windows, clarification alerts were verified with both a local gateway and a remote gateway connected by direct URL: the bell changed color, the alert sounded locally, and it stopped after an answer. SSH and Hermes Cloud connections have not been verified end to end.
 
 ## Privacy
 

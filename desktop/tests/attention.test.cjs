@@ -74,6 +74,97 @@ test('runtime polls snapshots for Desktop batch questions without reading messag
  const {Runtime}=load({sdk:{host}});const ctx={storage:{get:(k,f)=>f},onEvent(){},setInterval(){},onDispose:f=>disposers.push(f)};
  const r=new Runtime(ctx);assert.equal(typeof r.poll,'function','background reconciliation missing');await r.poll();assert.equal(r.queue.rows().length,1);assert.equal(calls.find(([m])=>m==='session.resume')[1].omit_messages,true);disposers.forEach(f=>f());
 });
+test('poll discovers a focused remote batch question while the active gateway remains local',async()=>{
+ const local={connectionId:'local',profile:'default',targetProfile:'default',mode:'local'},remote={connectionId:'synthetic-remote',profile:'default',targetProfile:'default',mode:'remote'},unused={...remote,connectionId:'synthetic-unused'};
+ const calls=[],disposers=[];const host={state:{connectionId:{get:()=>local.connectionId},profile:{get:()=>local.profile},focusedSessionOwner:{get:()=>({connectionId:remote.connectionId,profile:remote.profile})},focusedSessionId:{get:()=>'synthetic-remote-session'}},
+  profileRoutes:async()=>[local,remote,unused],requestProfile:async(route,method,params)=>{
+   calls.push({route,method,params});assert.notEqual(route.connectionId,unused.connectionId,'unfocused saved remotes must not be contacted');
+   if(method==='session.active_list'){assert.equal(route,local);return {sessions:[]}}
+   assert.equal(route,remote);assert.equal(method,'session.resume');assert.equal(params.session_id,'synthetic-remote-session');assert.equal(params.omit_messages,true);
+   return {running:true,prompts:[],open_requests:[{id:'synthetic-remote-question',method:'clarify',params:{questions:[{qid:'q1',question:'Synthetic choice'}]}}]}
+  }};
+ const {Runtime}=load({sdk:{host}}),r=new Runtime({storage:{get:(k,f)=>f},onEvent(){},setInterval(){},onDispose:fn=>disposers.push(fn)});
+ await r.poll();assert.equal(r.queue.rows().length,1,'the focused remote question must be detected without a gateway event');
+ assert.equal(r.queue.rows()[0].connectionId,remote.connectionId);assert.equal(r.queue.rows()[0].sessionId,'synthetic-remote-session');assert.equal(calls.filter(call=>call.method==='session.resume').length,1);
+ disposers.forEach(fn=>fn());
+});
+test('focused remote requests settle through snapshots without depending on another inventory scan',async()=>{
+ const local={connectionId:'local',profile:'default'},remote={connectionId:'synthetic-remote',profile:'default'},calls=[],disposers=[];
+ let focused=false,pending=true;const host={state:{connectionId:{get:()=>local.connectionId},profile:{get:()=>local.profile},focusedSessionOwner:{get:()=>focused?remote:null},focusedSessionId:{get:()=>focused?'synthetic-remote-session':null}},profileRoutes:async()=>[local,remote],requestProfile:async(route,method,params)=>{
+  calls.push({route,method,params});if(method==='session.active_list')return {sessions:[]};assert.equal(route,remote);
+  return {running:pending,prompts:[],open_requests:pending?[{id:'synthetic-question',method:'clarify',params:{}}]:[]}
+ }};
+ const {Runtime}=load({sdk:{host}}),r=new Runtime({storage:{get:(k,f)=>f},onEvent(){},setInterval(){},onDispose:fn=>disposers.push(fn)});
+ await r.poll();assert.equal(r.queue.rows().length,0);focused=true;await r.poll();assert.equal(r.queue.rows().length,1);
+ pending=false;await r.poll();assert.equal(r.queue.rows().length,0);assert.equal(calls.filter(call=>call.method==='session.active_list').length,1);disposers.forEach(fn=>fn());
+});
+test('focused session discovery does not guess an ambiguous or incomplete owner',async()=>{
+ for(const [owner,id] of [[null,'synthetic-session'],[{profile:'default'},'synthetic-session'],[{connectionId:'synthetic-remote'},'synthetic-session'],[{connectionId:'synthetic-remote',profile:'default'},null]]){
+  const calls=[],disposers=[];const host={state:{connectionId:{get:()=>'local'},profile:{get:()=>'default'},focusedSessionOwner:{get:()=>owner},focusedSessionId:{get:()=>id}},profileRoutes:async()=>[{connectionId:'local',profile:'default'}],requestProfile:async(route,method)=>{calls.push(method);assert.equal(route.connectionId,'local');return {sessions:[]}}};
+  const {Runtime}=load({sdk:{host}}),r=new Runtime({storage:{get:(k,f)=>f},onEvent(){},setInterval(){},onDispose:fn=>disposers.push(fn)});
+  await r.poll();assert.deepEqual(calls,['session.active_list']);assert.equal(r.scopes.size,0);assert.equal(r.queue.rows().length,0);disposers.forEach(fn=>fn());
+ }
+});
+test('resume uses the stored session key without changing the runtime queue identity',async()=>{
+ for(const discovery of ['focused','inventory']){
+  const route={connectionId:'synthetic-remote',profile:'default',targetProfile:'default'};
+  const runtimeId='synthetic-runtime',storedId='synthetic-stored',calls=[],disposers=[];
+  const atom=value=>({get:()=>value});let pending=true,listener;
+  const host={state:{connectionId:atom(route.connectionId),profile:atom(route.profile),...discovery==='focused'&&{focusedSessionOwner:atom(route),focusedSessionId:atom(runtimeId),focusedStoredSessionId:atom(storedId)}},
+   profileRoutes:async()=>[route],requestProfile:async(actual,method,params)=>{
+    assert.equal(actual,route);
+    if(method==='session.active_list')return {sessions:[{id:runtimeId,status:'waiting',...discovery==='inventory'&&{session_key:storedId}}]};
+    calls.push(params.session_id);assert.equal(params.omit_messages,true);
+    if(params.session_id!==storedId)throw new Error('Session not found');
+    return {session_id:runtimeId,session_key:storedId,messages_omitted:true,running:true,...pending&&{open_requests:[{id:'synthetic-question',method:'clarify',params:{}}]}};
+   }};
+  const {Runtime}=load({sdk:{host}}),r=new Runtime({storage:{get:(k,f)=>f},onEvent:(_,fn)=>{listener=fn},setInterval(){},onDispose:fn=>disposers.push(fn)});
+  await r.poll();assert.equal(r.queue.rows().length,1,discovery);assert.equal(r.queue.rows()[0].sessionId,runtimeId);
+  listener({type:'clarify.request',session_id:runtimeId,connectionId:route.connectionId,profile:route.profile,payload:{request_id:'synthetic-question'}});
+  assert.equal(r.queue.rows().length,1);
+  let stops=0;r.activeKeys=[r.queue.rows()[0].key];r.player.stop=()=>{stops++;r.activeKeys=[]};
+  pending=false;await r.poll();assert.equal(r.queue.rows().length,0);assert.equal(stops,1);
+  await r.poll();assert.equal(r.queue.due(Date.now()+30000).length,0);assert.deepEqual(calls,[storedId,storedId,storedId]);
+  disposers.forEach(fn=>fn());
+ }
+});
+test('unrecognized snapshots suspend repeats without clearing a pending request',async()=>{
+ const route={connectionId:'synthetic-remote',profile:'default'},atom=value=>({get:()=>value});
+ const control={running:true,prompts:[],open_requests:[{id:'synthetic-question',method:'clarify'}]};let snapshot=control;
+ const host={state:{connectionId:atom(route.connectionId),profile:atom(route.profile)},profileRoutes:async()=>[route],requestProfile:async(_,method)=>method==='session.active_list'?{sessions:[{id:'synthetic-runtime',session_key:'synthetic-stored',status:'waiting'}]}:snapshot};
+ const {Runtime}=load({sdk:{host}}),r=new Runtime({storage:{get:(k,f)=>f},onEvent(){},setInterval(){},onDispose(){}});
+ await r.poll();assert.equal(r.queue.rows().length,1);
+ for(const invalid of [{running:true},{session_id:'wrong-runtime',session_key:'synthetic-stored',messages_omitted:true,running:true},{session_id:'synthetic-runtime',session_key:'synthetic-stored',messages_omitted:true,running:true,open_requests:null},{session_id:'synthetic-runtime',session_key:'synthetic-stored',messages_omitted:true,running:true,pending_approval:{id:'other'}}]){
+  snapshot=invalid;await r.poll();assert.equal(r.queue.rows().length,1);assert.equal(r.queue.due(Date.now()+30000).length,0);
+ }
+ snapshot=control;await r.poll();assert.equal(r.queue.due(Date.now()+30000).length,1);
+});
+test('inventory failure does not block a known focused remote session',async()=>{
+ const local={connectionId:'local',profile:'default'},remote={connectionId:'synthetic-remote',profile:'default'},atom=value=>({get:()=>value});
+ let failures=2,pending=true,reads=0;
+ const host={state:{connectionId:atom(local.connectionId),profile:atom(local.profile),focusedSessionOwner:atom(remote),focusedSessionId:atom('synthetic-session')},profileRoutes:async()=>[local,remote],requestProfile:async(route,method)=>{
+  if(method==='session.active_list'){assert.equal(route,local);if(failures-->0)throw Error('Inventory unavailable');return {sessions:[]}}
+  assert.equal(route,remote);reads++;return {running:true,open_requests:pending?[{id:'synthetic-question',method:'clarify'}]:[]};
+ }};
+ const {Runtime}=load({sdk:{host}}),r=new Runtime({storage:{get:(k,f)=>f},onEvent(){},setInterval(){},onDispose(){}});
+ await r.poll();assert.equal(r.queue.rows().length,1);assert.equal(r.error.key,'pollFailed');assert.equal(r.queue.due(Date.now()+3000).length,1);
+ pending=false;await r.poll();assert.equal(r.queue.rows().length,0);assert.equal(r.error.key,'pollFailed');
+ await r.poll();assert.equal(r.error,'');assert.equal(reads,3);
+});
+test('legacy settlement accepts precisely the runtime fallback key used for resume',async()=>{
+ const route={connectionId:'synthetic-remote',profile:'default'},atom=value=>({get:()=>value}),id='synthetic-runtime';
+ const state={session_id:id,session_key:id,messages_omitted:true,running:true};let snapshot={...state,open_requests:[{id:'synthetic-question',method:'clarify'}]};
+ const host={state:{connectionId:atom(route.connectionId),profile:atom(route.profile)},profileRoutes:async()=>[route],requestProfile:async(_,method,params)=>{
+  if(method==='session.active_list')return {sessions:[{id,status:'waiting'}]};assert.equal(params.session_id,id);return snapshot;
+ }};
+ const {Runtime}=load({sdk:{host}}),r=new Runtime({storage:{get:(k,f)=>f},onEvent(){},setInterval(){},onDispose(){}});
+ await r.poll();assert.equal(r.queue.rows().length,1);
+ snapshot={...state,session_key:'other-key'};await r.poll();assert.equal(r.queue.rows().length,1);assert.equal(r.queue.due(Date.now()+3000).length,0);
+ snapshot={...state,open_requests:[{id:'synthetic-question',method:'clarify'}]};await r.poll();
+ let stops=0;r.activeKeys=[r.queue.rows()[0].key];r.player.stop=()=>{stops++;r.activeKeys=[]};
+ snapshot=state;await r.poll();assert.equal(r.queue.rows().length,0);assert.equal(stops,1);
+ await r.poll();assert.equal(r.queue.due(Date.now()+30000).length,0);
+});
 test('muting reaches windows that discover a request later',()=>{
  const storage=new Map(),env={localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},sdk:{host:{state:{}}}};
  const {Runtime}=load(env),ctx={storage:{get:(k,f)=>f},onEvent(){},setInterval(){},onDispose(){}};

@@ -2,6 +2,14 @@
 
 Desktop and backend versions are independent. Unreleased entries describe local source changes, not a published release.
 
+## Desktop 1.5.3 / backend API 1.1.0 — 2026-11-19
+
+- Reconcile the focused chat using its connection-qualified owner when the Desktop SDK exposes it, even when the active gateway inventory belongs to another connection. Do not contact unrelated saved remotes or guess an unresolved owner.
+- Use the stored session key for `session.resume` when the SDK or live inventory supplies it, while keeping event and alarm queue identity scoped to the runtime session ID.
+- Clear settled alerts when a matching legacy session snapshot omits empty pending fields, including when resume uses the runtime ID as the lookup key. Suspend repeats on unrecognized snapshots rather than treating them as fresh confirmation.
+- Continue checking known sessions when the active gateway's session inventory fails, and keep the inventory warning visible until recovery.
+- Verify clarification alerts on Windows with both a local gateway and a direct-URL remote gateway, including bell color, audible playback, and stopping after an answer.
+
 ## Desktop 1.5.2 / backend API 1.1.0 — 2026-11-18
 
 - Make Test prepare missing or outdated speech before playing a single preview, including the unchanged default message on a fresh installation. Reuse matching saved recordings and wait for synthesis already in progress instead of issuing duplicate requests.

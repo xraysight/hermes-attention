@@ -40,6 +40,8 @@ On a disposable setup, use a real click on **Test** and confirm audibility; then
 
 Live TTS checks are optional and require explicit consent to send text and possibly spend money. Use a harmless phrase and your own provider setup; never include the generated recording in the public archive.
 
+For remote detection, test a focused remote chat while the active gateway remains local, including a batch clarification delivered without a prompt event. Verify the actual connection-qualified owner, discovery after a focus change between inventory scans, bell state, audible local playback, and clearing after the user's response. Keep unrelated saved remotes untouched; unresolved ownership must not be guessed. Record real connection tests separately from mocked SDK contract coverage.
+
 Do not modify or restart someone's installed plugin/gateway as part of a source contribution without permission. Wait for active tasks to finish before any authorized gateway restart.
 
 Report vulnerabilities according to [SECURITY.md](SECURITY.md), not in a public issue containing sensitive details.
